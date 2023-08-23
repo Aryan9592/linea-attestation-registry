@@ -19,7 +19,7 @@ contract AttestationRegistryTest is Test {
 
   event Initialized(uint8 version);
   event AttestationRegistered(Attestation attestation);
-  event AttestationRevoked(bytes32 attestationId);
+  event AttestationRevoked(uint256 attestationId);
   event VersionUpdated(uint16 version);
 
   function setUp() public {
@@ -51,6 +51,7 @@ contract AttestationRegistryTest is Test {
   }
 
   function test_attest(Attestation memory attestation) public {
+    attestation.attestationId = attestationRegistry.getAttestationId();
     vm.expectEmit(true, true, true, true);
     emit AttestationRegistered(attestation);
     vm.prank(portal);
@@ -61,52 +62,24 @@ contract AttestationRegistryTest is Test {
   }
 
   function test_attest_PortalNotRegistered(Attestation memory attestation) public {
+    attestation.attestationId = attestationRegistry.getAttestationId();
     vm.expectRevert(AttestationRegistry.OnlyPortal.selector);
     vm.prank(user);
     attestationRegistry.attest(attestation);
   }
 
-  function test_attest_AttestationAlreadyAttested(Attestation memory attestation) public {
+  function test_attest_AlreadyAttested(Attestation memory attestation) public {
+    attestation.attestationId = attestationRegistry.getAttestationId();
     vm.startPrank(portal);
     attestationRegistry.attest(attestation);
 
-    vm.expectRevert(AttestationRegistry.AttestationAlreadyAttested.selector);
+    vm.expectRevert();
     attestationRegistry.attest(attestation);
     vm.stopPrank();
-  }
-
-  function test_revoke(Attestation memory attestation) public {
-    vm.assume(attestation.attestationId != bytes32(0));
-    attestation.portal = portal;
-
-    vm.startPrank(portal);
-    attestationRegistry.attest(attestation);
-
-    vm.expectEmit(true, true, true, true);
-    emit AttestationRevoked(attestation.attestationId);
-    attestationRegistry.revoke(attestation.attestationId);
-    vm.stopPrank();
-
-    Attestation memory registeredAttestation = attestationRegistry.getAttestation(attestation.attestationId);
-    assertEq(registeredAttestation.revoked, true);
-  }
-
-  function test_revoke_AttestationNotAttested(Attestation memory attestation) public {
-    vm.expectRevert(AttestationRegistry.AttestationNotAttested.selector);
-    attestationRegistry.revoke(attestation.attestationId);
-  }
-
-  function test_revoke_OnlyAttestingPortal(Attestation memory attestation) public {
-    vm.prank(portal);
-    attestationRegistry.attest(attestation);
-
-    vm.expectRevert(AttestationRegistry.OnlyAttestingPortal.selector);
-    vm.prank(user);
-    attestationRegistry.revoke(attestation.attestationId);
   }
 
   function test_isRegistered(Attestation memory attestation) public {
-    vm.assume(attestation.attestationId != bytes32(0));
+    attestation.attestationId = attestationRegistry.getAttestationId();
     attestation.portal = portal;
 
     bool isRegistered = attestationRegistry.isRegistered(attestation.attestationId);
@@ -120,7 +93,7 @@ contract AttestationRegistryTest is Test {
   }
 
   function test_getAttestation(Attestation memory attestation) public {
-    vm.assume(attestation.attestationId != bytes32(0));
+    attestation.attestationId = attestationRegistry.getAttestationId();
     attestation.portal = portal;
 
     vm.startPrank(portal);
@@ -131,6 +104,7 @@ contract AttestationRegistryTest is Test {
   }
 
   function test_getAttestation_AttestationNotAttested(Attestation memory attestation) public {
+    attestation.attestationId = attestationRegistry.getAttestationId();
     vm.expectRevert(AttestationRegistry.AttestationNotAttested.selector);
     attestationRegistry.getAttestation(attestation.attestationId);
   }

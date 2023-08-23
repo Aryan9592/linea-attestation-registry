@@ -6,22 +6,30 @@ import { Test } from "forge-std/Test.sol";
 import { PortalRegistry } from "../src/PortalRegistry.sol";
 import { AbstractPortal } from "../src/interface/AbstractPortal.sol";
 import { CorrectModule } from "../src/example/CorrectModule.sol";
-import { AttestationPayload, Portal } from "../src/types/Structs.sol";
+import { ModuleRegistryMock } from "./mocks/ModuleRegistryMock.sol";
+import { AttestationRegistryMock } from "./mocks/AttestationRegistryMock.sol";
+import { AttestationPayload, Portal, Attestation } from "../src/types/Structs.sol";
 import { IERC165 } from "openzeppelin-contracts/contracts/utils/introspection/ERC165.sol";
 
 contract PortalRegistryTest is Test {
   address public user = makeAddr("user");
   PortalRegistry public portalRegistry;
+  ModuleRegistryMock public moduleRegistryMock = new ModuleRegistryMock();
+  AttestationRegistryMock public attestationRegistryMock = new AttestationRegistryMock();
   string public expectedName = "Name";
   string public expectedDescription = "Description";
-  ValidPortal public validPortal = new ValidPortal();
+  ValidPortal public validPortal;
   InvalidPortal public invalidPortal = new InvalidPortal();
 
   event Initialized(uint8 version);
   event PortalRegistered(string name, string description, address moduleAddress);
 
   function setUp() public {
+    address[] memory modules = new address[](2);
+    modules[0] = address(0);
+    modules[1] = address(0);
     portalRegistry = new PortalRegistry();
+    validPortal = new ValidPortal(modules, address(moduleRegistryMock), address(attestationRegistryMock));
   }
 
   function test_initialize() public {
@@ -95,24 +103,16 @@ contract PortalRegistryTest is Test {
   }
 }
 
-contract ValidPortal is AbstractPortal, IERC165 {
-  function test() public {}
+contract ValidPortal is AbstractPortal {
+  constructor(
+    address[] memory _modules,
+    address _moduleRegistry,
+    address _attestationRegistry
+  ) AbstractPortal(_modules, _moduleRegistry, _attestationRegistry) {}
 
-  function attest(
-    AttestationPayload memory /*attestationPayload*/,
-    bytes[] memory /*validationPayload*/
-  ) external payable override {}
+  function _beforeAttest(Attestation memory attestation, uint256 value) internal override {}
 
-  function getModules() external pure override returns (address[] memory) {
-    address[] memory modules = new address[](2);
-    modules[0] = address(0);
-    modules[1] = address(1);
-    return modules;
-  }
-
-  function supportsInterface(bytes4 interfaceID) external pure returns (bool) {
-    return interfaceID == type(AbstractPortal).interfaceId || interfaceID == type(IERC165).interfaceId;
-  }
+  function _afterAttest(Attestation memory attestation, uint256 value) internal override {}
 }
 
 contract InvalidPortal {

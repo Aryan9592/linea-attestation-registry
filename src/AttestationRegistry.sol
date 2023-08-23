@@ -15,9 +15,10 @@ contract AttestationRegistry is OwnableUpgradeable {
   PortalRegistry public portalRegistry;
   SchemaRegistry public schemaRegistry;
 
-  mapping(bytes32 attestationId => Attestation attestation) private attestations;
-
+  uint256 private _attestationId;
   uint16 private version;
+
+  mapping(uint256 attestationId => Attestation attestation) private attestations;
 
   /// @notice Error thrown when a non-portal tries to call a method that can only be called by a portal
   error OnlyPortal();
@@ -39,7 +40,7 @@ contract AttestationRegistry is OwnableUpgradeable {
   /// @notice Event emitted when an attestation is registered
   event AttestationRegistered(Attestation attestation);
   /// @notice Event emitted when an attestation is revoked
-  event AttestationRevoked(bytes32 attestationId);
+  event AttestationRevoked(uint256 attestationId);
 
   /// @notice Event emitted when the version number is incremented
   event VersionUpdated(uint16 version);
@@ -71,22 +72,14 @@ contract AttestationRegistry is OwnableUpgradeable {
    * @dev This method is only callable by a registered Portal
    */
   function attest(Attestation calldata attestation) external onlyPortals(msg.sender) {
-    if (isRegistered(attestation.attestationId)) revert AttestationAlreadyAttested();
+    assert(attestation.attestationId == _attestationId);
     attestations[attestation.attestationId] = attestation;
+    ++_attestationId;
     emit AttestationRegistered(attestation);
   }
 
-  /**
-   * @notice Revokes an attestation of given identifier
-   * @param attestationId the attestation identifier
-   */
-  function revoke(bytes32 attestationId) external {
-    if (!isRegistered(attestationId)) revert AttestationNotAttested();
-    if (msg.sender != attestations[attestationId].portal) revert OnlyAttestingPortal();
-
-    attestations[attestationId].revoked = true;
-
-    emit AttestationRevoked(attestationId);
+  function getAttestationId() public view returns (uint256) {
+    return _attestationId;
   }
 
   /**
@@ -94,8 +87,8 @@ contract AttestationRegistry is OwnableUpgradeable {
    * @param attestationId the attestation identifier
    * @return true if the attestation is registered, false otherwise
    */
-  function isRegistered(bytes32 attestationId) public view returns (bool) {
-    return attestations[attestationId].attestationId != bytes32(0);
+  function isRegistered(uint256 attestationId) public view returns (bool) {
+    return attestationId < _attestationId;
   }
 
   /**
@@ -103,7 +96,7 @@ contract AttestationRegistry is OwnableUpgradeable {
    * @param attestationId the attestation identifier
    * @return the attestation
    */
-  function getAttestation(bytes32 attestationId) public view returns (Attestation memory) {
+  function getAttestation(uint256 attestationId) public view returns (Attestation memory) {
     if (!isRegistered(attestationId)) revert AttestationNotAttested();
     return attestations[attestationId];
   }

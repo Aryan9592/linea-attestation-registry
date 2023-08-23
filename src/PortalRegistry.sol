@@ -83,8 +83,7 @@ contract PortalRegistry is Initializable {
    * @param description the portal description
    */
   function deployDefaultPortal(address[] calldata modules, string memory name, string memory description) external {
-    DefaultPortal defaultPortal = new DefaultPortal();
-    defaultPortal.initialize(modules, moduleRegistry, attestationRegistry);
+    DefaultPortal defaultPortal = new DefaultPortal(modules, moduleRegistry, attestationRegistry);
     register(address(defaultPortal), name, description);
   }
 

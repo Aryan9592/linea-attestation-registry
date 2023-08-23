@@ -2,7 +2,6 @@
 pragma solidity 0.8.21;
 
 import { Initializable } from "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
-import { IERC165 } from "openzeppelin-contracts/contracts/utils/introspection/ERC165.sol";
 import { AttestationRegistry } from "../AttestationRegistry.sol";
 import { ModuleRegistry } from "../ModuleRegistry.sol";
 import { AbstractPortal } from "../interface/AbstractPortal.sol";
@@ -13,13 +12,15 @@ import { Attestation, AttestationPayload, Portal } from "../types/Structs.sol";
  * @author Consensys
  * @notice This contract aims to provide a default portal
  */
-contract DefaultPortal is Initializable, AbstractPortal, IERC165 {
-  address[] public modules;
-  ModuleRegistry public moduleRegistry;
-  AttestationRegistry public attestationRegistry;
-
-  /// @notice Error thown when attempting to initialize the default portal twice
-  error PortalAlreadyInitialized();
+contract DefaultPortal is Initializable, AbstractPortal {
+  /// @custom:oz-upgrades-unsafe-allow constructor
+  constructor(
+    address[] memory _modules,
+    address _moduleRegistry,
+    address _attestationRegistry
+  ) AbstractPortal(_modules, _moduleRegistry, _attestationRegistry) {
+    _disableInitializers();
+  }
 
   /**
    * @notice Contract initialization
@@ -35,44 +36,7 @@ contract DefaultPortal is Initializable, AbstractPortal, IERC165 {
     modules = _modules;
   }
 
-  /**
-   * @notice Get all modules from the default portal clone
-   * @return The Modules
-   */
-  function getModules() external view override returns (address[] memory) {
-    return modules;
-  }
+  function _beforeAttest(Attestation memory attestation, uint256 value) internal override {}
 
-  /**
-   * @notice attest the schema with given attestationPayload and validationPayload
-   * @dev Runs all modules for the portal and stores the attestation in AttestationRegistry
-   */
-  function attest(
-    AttestationPayload memory attestationPayload,
-    bytes[] memory validationPayload
-  ) external payable override {
-    moduleRegistry.runModules(modules, validationPayload);
-
-    Attestation memory attestation = Attestation(
-      attestationPayload.attestationId,
-      attestationPayload.schemaId,
-      attestationPayload.attester,
-      address(this),
-      attestationPayload.subject,
-      block.timestamp,
-      attestationPayload.expirationDate,
-      false,
-      1,
-      attestationPayload.attestationData
-    );
-
-    attestationRegistry.attest(attestation);
-  }
-
-  /**
-   * @notice Implements supports interface method declaring it is an AbstractPortal
-   */
-  function supportsInterface(bytes4 interfaceID) public pure override returns (bool) {
-    return interfaceID == type(AbstractPortal).interfaceId || interfaceID == type(IERC165).interfaceId;
-  }
+  function _afterAttest(Attestation memory attestation, uint256 value) internal override {}
 }
