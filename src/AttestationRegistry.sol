@@ -60,10 +60,14 @@ contract AttestationRegistry is OwnableUpgradeable {
    */
   function initialize(address _portalRegistry, address _schemaRegistry) public initializer {
     __Ownable_init();
+
     if (_portalRegistry == address(0)) revert PortalRegistryInvalid();
     if (_schemaRegistry == address(0)) revert SchemaRegistryInvalid();
     portalRegistry = PortalRegistry(_portalRegistry);
     schemaRegistry = SchemaRegistry(_schemaRegistry);
+
+    _attestationId = 1;
+    version = 1;
   }
 
   /**

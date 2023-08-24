@@ -123,14 +123,14 @@ contract AttestationRegistryTest is Test {
   }
 
   function test_incrementVersionNumber() public {
-    assertEq(attestationRegistry.getVersionNumber(), 0);
+    assertEq(attestationRegistry.getVersionNumber(), 1);
     for (uint16 i = 1; i <= 5; i++) {
       vm.expectEmit(true, true, true, true);
-      emit VersionUpdated(i);
+      emit VersionUpdated(i + 1);
       uint256 version = attestationRegistry.incrementVersionNumber();
-      assertEq(version, i);
+      assertEq(version, i + 1);
       uint16 newVersion = attestationRegistry.getVersionNumber();
-      assertEq(newVersion, i);
+      assertEq(newVersion, i + 1);
     }
   }
 }
