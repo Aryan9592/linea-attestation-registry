@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { OwnableUpgradeable } from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import { Attestation } from "./types/Structs.sol";
+import { Attestation, AttestationPayload, Portal } from "./types/Structs.sol";
 import { PortalRegistry } from "./PortalRegistry.sol";
 import { SchemaRegistry } from "./SchemaRegistry.sol";
 import { IRouter } from "./interface/IRouter.sol";
@@ -16,6 +16,8 @@ contract AttestationRegistry is OwnableUpgradeable {
   IRouter public router;
 
   uint16 private version;
+  uint private attestationIdCounter;
+  mapping(bytes32 attestationId => Attestation attestation) private attestations;
 
   mapping(bytes32 attestationId => Attestation attestation) private attestations;
 
@@ -23,22 +25,21 @@ contract AttestationRegistry is OwnableUpgradeable {
   error OnlyPortal();
   /// @notice Error thrown when an invalid Router address is given
   error RouterInvalid();
-  /// @notice Error thrown when a portal is not registered in the PortalRegistry
-  error PortalNotRegistered();
-  /// @notice Error thrown when an attestation is already registered in the AttestationRegistry
-  error AttestationAlreadyAttested();
-  /// @notice Error thrown when a schema is not registered in the SchemaRegistry
-  error SchemaNotRegistered();
   /// @notice Error thrown when an attestation is not registered in the AttestationRegistry
   error AttestationNotAttested();
   /// @notice Error thrown when an attempt is made to revoke an attestation by an entity other than the attesting portal
   error OnlyAttestingPortal();
+  /// @notice Error thrown when an attempt is made to revoke an attestation by someone else than the orignal attester
+  error OnlyAttester();
+  /// @notice Error thrown when an attempt is made to revoke an attestation that was already revoked
+  error AlreadyRevoked();
+  /// @notice Error thrown when an attempt is made to revoke an attestation based on a non-revocable schema
+  error AttestationNotRevocable();
 
   /// @notice Event emitted when an attestation is registered
   event AttestationRegistered(Attestation attestation);
   /// @notice Event emitted when an attestation is revoked
-  event AttestationRevoked(bytes32 attestationId);
-
+  event AttestationRevoked(bytes32 attestationId, bytes32 replacedBy);
   /// @notice Event emitted when the version number is incremented
   event VersionUpdated(uint16 version);
 
@@ -74,26 +75,49 @@ contract AttestationRegistry is OwnableUpgradeable {
 
   /**
    * @notice Registers an attestation to the AttestationRegistry
-   * @param attestation the attestation to register
+   * @param attestationPayload the attestation payload to create attestation and register it
    * @dev This method is only callable by a registered Portal
    */
-  function attest(Attestation calldata attestation) external onlyPortals(msg.sender) {
-    if (isRegistered(attestation.attestationId)) revert AttestationAlreadyAttested();
+  function attest(AttestationPayload calldata attestationPayload, address attester) external onlyPortals(msg.sender) {
+    // Auto increment attestation counter
+    attestationIdCounter++;
+    // Create attestation
+    Attestation memory attestation = Attestation(
+      bytes32(keccak256(abi.encode((attestationIdCounter)))),
+      attestationPayload.schemaId,
+      attester,
+      msg.sender,
+      attestationPayload.subject,
+      block.timestamp,
+      attestationPayload.expirationDate,
+      false,
+      0,
+      bytes32(0),
+      version,
+      attestationPayload.attestationData
+    );
     attestations[attestation.attestationId] = attestation;
     emit AttestationRegistered(attestation);
   }
 
   /**
-   * @notice Revokes an attestation of given identifier
-   * @param attestationId the attestation identifier
+   * @notice Revokes an attestation for given identifier and can replace it by an other one
+   * @param attestationId the attestation ID to revoke
+   * @param replacedBy the replacing attestation ID (leave empty to just revoke)
    */
-  function revoke(bytes32 attestationId) external {
+  function revoke(bytes32 attestationId, bytes32 replacedBy) external {
     if (!isRegistered(attestationId)) revert AttestationNotAttested();
+    if (attestations[attestationId].revoked) revert AlreadyRevoked();
     if (msg.sender != attestations[attestationId].portal) revert OnlyAttestingPortal();
+    if (tx.origin != attestations[attestationId].attester) revert OnlyAttester();
+    if (!isRevocable(attestations[attestationId].portal)) revert AttestationNotRevocable();
 
     attestations[attestationId].revoked = true;
+    attestations[attestationId].revocationDate = block.timestamp;
 
-    emit AttestationRevoked(attestationId);
+    if (isRegistered(replacedBy)) attestations[attestationId].replacedBy = replacedBy;
+
+    emit AttestationRevoked(attestationId, replacedBy);
   }
 
   /**
@@ -103,6 +127,16 @@ contract AttestationRegistry is OwnableUpgradeable {
    */
   function isRegistered(bytes32 attestationId) public view returns (bool) {
     return attestations[attestationId].attestationId != bytes32(0);
+  }
+
+  /**
+   * @notice Checks whether a portal issues revocable attestations
+   * @param portalId the portal address (ID)
+   * @return true if the attestations issued by this portal are revocable, false otherwise
+   */
+  function isRevocable(address portalId) public view returns (bool) {
+    PortalRegistry portalRegistry = PortalRegistry(router.getPortalRegistry());
+    return portalRegistry.getPortalByAddress(portalId).isRevocable;
   }
 
   /**
@@ -131,5 +165,13 @@ contract AttestationRegistry is OwnableUpgradeable {
    */
   function getVersionNumber() public view returns (uint16) {
     return version;
+  }
+
+  /**
+   * @notice Gets the attestation id counter
+   * @return The attestationIdCounter
+   */
+  function getAttestationIdCounter() public view returns (uint) {
+    return attestationIdCounter;
   }
 }

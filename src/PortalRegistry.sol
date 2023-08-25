@@ -31,13 +31,15 @@ contract PortalRegistry is OwnableUpgradeable {
   error PortalNameMissing();
   /// @notice Error thrown when attempting to register a Portal with an empty description
   error PortalDescriptionMissing();
+  /// @notice Error thrown when attempting to register a Portal with an empty owner name
+  error PortalOwnerNameMissing();
   /// @notice Error thrown when attempting to register a Portal that does not implement IPortal interface
   error PortalInvalid();
   /// @notice Error thrown when attempting to get a Portal that is not registered
   error PortalNotRegistered();
 
   /// @notice Event emitted when a Portal registered
-  event PortalRegistered(string name, string description, address moduleAddress);
+  event PortalRegistered(string name, string description, address portalAddress);
 
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
@@ -64,8 +66,16 @@ contract PortalRegistry is OwnableUpgradeable {
    * @param id the portal address
    * @param name the portal name
    * @param description the portal description
+   * @param isRevocable whether the portal issues revocable attestations
+   * @param ownerName name of this portal's owner
    */
-  function register(address id, string memory name, string memory description) public {
+  function register(
+    address id,
+    string memory name,
+    string memory description,
+    bool isRevocable,
+    string memory ownerName
+  ) public {
     // Check if portal already exists
     if (portals[id].id != address(0)) revert PortalAlreadyExists();
 
@@ -78,14 +88,17 @@ contract PortalRegistry is OwnableUpgradeable {
     // Check if description is not empty
     if (bytes(description).length == 0) revert PortalDescriptionMissing();
 
-    // Check if portal has implemented IPortal
+    // Check if the owner's name is not empty
+    if (bytes(ownerName).length == 0) revert PortalOwnerNameMissing();
+
+    // Check if portal has implemented AbstractPortal
     if (!ERC165CheckerUpgradeable.supportsInterface(id, type(AbstractPortal).interfaceId)) revert PortalInvalid();
 
     // Get the array of modules implemented by the portal
     address[] memory modules = AbstractPortal(id).getModules();
 
     // Add portal to mapping
-    Portal memory newPortal = Portal(id, name, description, modules);
+    Portal memory newPortal = Portal(id, name, description, modules, isRevocable, msg.sender, ownerName);
     portals[id] = newPortal;
     portalAddresses.push(id);
 
@@ -98,11 +111,18 @@ contract PortalRegistry is OwnableUpgradeable {
    * @param modules the modules addresses
    * @param name the portal name
    * @param description the portal description
+   * @param ownerName name of this portal's owner
    */
-  function deployDefaultPortal(address[] calldata modules, string memory name, string memory description) external {
+  function deployDefaultPortal(
+    address[] calldata modules,
+    string memory name,
+    string memory description,
+    bool isRevocable,
+    string memory ownerName
+  ) external {
     DefaultPortal defaultPortal = new DefaultPortal();
     defaultPortal.initialize(modules, router.getModuleRegistry(), router.getAttestationRegistry());
-    register(address(defaultPortal), name, description);
+    register(address(defaultPortal), name, description, isRevocable, ownerName);
   }
 
   /**
